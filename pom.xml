@@ -53,7 +53,7 @@
         <math3.version>3.0</math3.version>
         <metrics.core.version>2.10.0</metrics.core.version>
         <mongo.driver.version>2.14.0</mongo.driver.version>
-        <mysql.connector.version>5.1.48</mysql.connector.version>
+        <mysql.connector.version>8.0.16</mysql.connector.version>
         <dropwizard.core.version>3.1.0</dropwizard.core.version>
         <mail.version>1.4.5</mail.version>
         <jetty.version>9.4.24.v20191120</jetty.version>

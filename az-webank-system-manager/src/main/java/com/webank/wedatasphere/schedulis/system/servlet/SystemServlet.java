@@ -111,6 +111,9 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
         if (ajaxName.equals("addSystemUserViaFastTrack")) {
             // 通过非登录页面的快速通道新增用户
             ajaxAddSystemUserViaFastTrack(req, resp, session, ret);
+        } else if (ajaxName.equals("addSystemUserViaFastTrackCtyun")) {
+            // 通过非登录页面，快速新增Ctyun用户
+            aiaxAddSystemUserViaFastTrackCtyun(req, resp, session, ret);
         } else if (ajaxName.equals("fetch")) {
             fetchHistoryData(req, resp, ret);
         } else if (ajaxName.equals("user_role")) {
@@ -177,6 +180,83 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
                     "com.webank.wedatasphere.schedulis.system.servlet.SystemServlet");
         }
         return dataMap;
+    }
+
+    /**
+     * 通过非登录页面的快速通道新增Ctyun用户：需要用户名和密码，其他固定
+     *
+     * @param req
+     * @param resp
+     * @param ret
+     * @throws ServletException
+     */
+    public void aiaxAddSystemUserViaFastTrackCtyun(final HttpServletRequest req, final HttpServletResponse resp,
+                                               final Session session, final HashMap<String, Object> ret) throws ServletException {
+        String userId;
+        String password;
+        if (hasParam(req, "userId")) {
+            userId = getParam(req, "userId");
+        } else {
+            userId = null;
+        }
+        if (hasParam(req, "password")) {
+            password = getParam(req, "password");
+        } else {
+            password = null;
+        }
+        int roleId = 2;
+        int categoryUser = 3;
+        String proxyUser = userId;
+        int departmentId = 9999999;
+        Map<String, String> dataMap = loadSystemServletI18nData();
+        try {
+            if (StringUtils.isBlank(userId)) {
+                throw new SystemUserManagerException("未填写用户ID。");
+            }
+            if (StringUtils.isBlank(password)) {
+                throw new SystemUserManagerException("未填写用户password");
+            }
+            // 校验用户是否存在
+            WtssUser wtssUser = null;
+            int addResult = 0;
+
+            // 校验用户是否存在
+            WtssUser tempWtssUser = this.systemManager.getSystemUserById(userId);
+            if (null == tempWtssUser) {
+                // 针对id 带前缀'wtss_' 的, 因为第一次添加的时候如果不是WebankUser对象,则会在userId前加上前缀'wtss_'
+                // 此处如果不加这个前缀是查不出来的, 代码就会走新增逻辑,然后报错:'主键userId重复定义'
+                // 该条查询在 this.systemManager.getSystemUserById(userId) 这条查询无结果之后再执行
+                WtssUser featureWtssUser = this.systemManager.getSystemUserById(("wtss_" + userId));
+                if (null != featureWtssUser) {
+                    wtssUser = featureWtssUser;
+                    userId = "wtss_" + userId;
+                }
+            } else {
+                wtssUser = tempWtssUser;
+            }
+
+            if (null != wtssUser) {
+                logger.error("wtssUser=" + JSON.toJSONString(wtssUser));
+                addResult = 3;
+            } else {
+                addResult = this.systemManager.addSystemUser(userId, password, 2, 3, userId, departmentId);
+            }
+
+            if (addResult == 1) {
+                ret.put("success", "add system user success");
+            } else if (addResult == 2) {
+                ret.put("success", "当前设置代理用户已存在,代理用户数据未发生变化");
+            } else if (addResult == 3) {
+                ret.put("success", "当前操作无数据发生变化");
+            } else if (addResult == 4) {
+                ret.put("success", "当前设置代理用户数据为空, 该操作无数据发生变化");
+            } else {
+                throw new SystemUserManagerException("新增WTSS用户失败!");
+            }
+
+        } catch (SystemUserManagerException e) {
+            ret.put("error", e.getMessage());
+        }
     }
 
 
@@ -573,7 +653,6 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
 
 
     }
-
 
     private void ajaxAddSystemUser(final HttpServletRequest req,
                                    final HttpServletResponse resp, final Session session, final HashMap<String, Object> ret)

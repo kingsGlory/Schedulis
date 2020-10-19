@@ -74,7 +74,7 @@ public abstract class LoginAbstractAzkabanServlet extends AbstractAzkabanServlet
 
   private static final HashMap<String, String> contextType = new HashMap<>();
 
-  private AzkabanServer application;
+  protected AzkabanServer application;
 
   static {
     contextType.put(".js", "application/javascript");
@@ -386,6 +386,7 @@ public abstract class LoginAbstractAzkabanServlet extends AbstractAzkabanServlet
     }
     final Props props = this.application.getServerProps();
     String nginxSSL = props.getString("nginx.ssl.module", "");
+    String contextPath = props.getString("azkaban.context.path", "");
     if("open".equals(nginxSSL)) {
       String referer = req.getHeader("Referer");
       String refererUrl = props.getString("azkaban.header.referer.url", "");
@@ -442,7 +443,7 @@ public abstract class LoginAbstractAzkabanServlet extends AbstractAzkabanServlet
         }
       }
       handleMultiformPost(req, resp, params, session);
-    } else if ("/checkin".equals(req.getRequestURI()) && hasParam(req, "action")
+    } else if ((contextPath + "/checkin").equals(req.getRequestURI()) && hasParam(req, "action")
             && getParam(req, "action").equals("login")) {
       final HashMap<String, Object> obj = new HashMap<>();
       handleAjaxLoginAction(req, resp, obj);

@@ -112,7 +112,7 @@
     <div class="navbar-header">
       <div class="navbar-logo">
         <a href="${context}/">
-        <img src="../../images/schedule.png" />
+        <img src="${context}/images/schedule.png" />
         </a>
         <div class="navbar-version">
           ${version}

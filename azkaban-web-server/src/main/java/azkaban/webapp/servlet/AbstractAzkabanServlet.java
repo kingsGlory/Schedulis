@@ -61,6 +61,7 @@ public abstract class AbstractAzkabanServlet extends HttpServlet {
     private static final String AZKABAN_WARN_MESSAGE = "azkaban.warn.message";
     private static final String AZKABAN_FAILURE_MESSAGE = "azkaban.failure.message";
     private static final long serialVersionUID = -1;
+    private static final String PATH_PREFIX = "/azkaban";
 
     protected String passwordPlaceholder;
     private AzkabanServer application;
@@ -348,6 +349,7 @@ public abstract class AbstractAzkabanServlet extends HttpServlet {
     protected Page newPage(final HttpServletRequest req, final HttpServletResponse resp,
         final Session session, final String template) {
         final Page page = new Page(req, resp, getApplication().getVelocityEngine(), template);
+        final Props props = this.application.getServerProps();
 
         page.add("version", jarVersion);
         page.add("azkaban_name", this.name);
@@ -360,11 +362,12 @@ public abstract class AbstractAzkabanServlet extends HttpServlet {
         page.add("timezone", TimeZone.getDefault().getID());
         page.add("currentTime", (new DateTime()).getMillis());
         page.add("size", getDisplayExecutionPageSize());
+        page.add("context", props.getString("azkaban.context.path",""));
 
         if (session != null && session.getUser() != null) {
             page.add("user_id", session.getUser().getUserId());
         }
-        page.add("context", req.getContextPath());
+//        page.add("context", req.getContextPath());
 
         final String errorMsg = getErrorMessageFromCookie(req);
         page.add("error_message", errorMsg == null || errorMsg.isEmpty() ? "null" : errorMsg);
@@ -397,7 +400,7 @@ public abstract class AbstractAzkabanServlet extends HttpServlet {
      */
     protected Page newPage(final HttpServletRequest req, final HttpServletResponse resp, final String template) {
         final Page page = new Page(req, resp, getApplication().getVelocityEngine(), template);
-
+        final Props props = this.application.getServerProps();
         page.add("version", jarVersion);
         page.add("azkaban_name", this.name);
         page.add("azkaban_label", this.label);
@@ -407,8 +410,9 @@ public abstract class AbstractAzkabanServlet extends HttpServlet {
         page.add("note_url", NoteServlet.url);
         page.add("timezone", TimeZone.getDefault().getID());
         page.add("currentTime", (new DateTime()).getMillis());
-        page.add("context", req.getContextPath());
+//        page.add("context", req.getContextPath());
         page.add("size", getDisplayExecutionPageSize());
+        page.add("context", props.getString("azkaban.context.path",""));
 
         // @TODO, allow more than one type of viewer. For time sake, I only install
         // the first one

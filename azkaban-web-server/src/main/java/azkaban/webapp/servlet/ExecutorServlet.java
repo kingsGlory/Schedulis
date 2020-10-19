@@ -149,7 +149,9 @@ public class ExecutorServlet extends LoginAbstractAzkabanServlet {
     @Override
     protected void handleGet(final HttpServletRequest req, final HttpServletResponse resp,
         final Session session) throws ServletException, IOException {
-        if ("/executor".equals(req.getRequestURI())) {
+        final Props props = this.application.getServerProps();
+        String contextPath = props.getString("azkaban.context.path", "");
+        if ((contextPath + "/executor").equals(req.getRequestURI())) {
             if (hasParam(req, "ajax")) {
                 handleAJAXAction(req, resp, session);
             } else if (hasParam(req, "execid")) {

@@ -748,7 +748,7 @@ public class AzkabanWebServer extends AzkabanServer {
     final String staticDir =
         this.props.getString("web.resource.dir", DEFAULT_STATIC_DIR);
     logger.info("Setting up web resource dir " + staticDir);
-    final ServletContextHandler root = new ServletContextHandler(this.server, "/", ServletContextHandler.SESSIONS);
+    final ServletContextHandler root = new ServletContextHandler(this.server, this.props.getString("azkaban.context.path", ""), ServletContextHandler.SESSIONS);
     root.getSessionHandler().setMaxInactiveInterval(30 * 60);
     root.addFilter(new FilterHolder(LocaleFilter.class),"/*", EnumSet.of(DispatcherType.REQUEST));
     root.setMaxFormContentSize(MAX_FORM_CONTENT_SIZE);

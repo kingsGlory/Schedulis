@@ -166,7 +166,8 @@ public class ProjectManagerServlet extends LoginAbstractAzkabanServlet {
     @Override
     protected void handleGet(final HttpServletRequest req, final HttpServletResponse resp,
         final Session session) throws ServletException, IOException {
-
+        final Props props = this.application.getServerProps();
+        String contextPath = props.getString("azkaban.context.path", "");
         if (hasParam(req, "project")) {
             if (hasParam(req, "ajax")) {
                 handleAJAXAction(req, resp, session);
@@ -196,7 +197,7 @@ public class ProjectManagerServlet extends LoginAbstractAzkabanServlet {
             return;
         } else if (hasParam(req, "reloadProjectWhitelist")) {
             handleReloadProjectWhitelist(req, resp, session);
-        } else if ("/manager".equals(req.getRequestURI())) {
+        } else if ((contextPath + "/manager").equals(req.getRequestURI())) {
             if (hasParam(req, "ajax")) {
                 handleAJAXAction(req, resp, session);
             }

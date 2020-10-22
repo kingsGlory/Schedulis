@@ -17,7 +17,18 @@
 package com.webank.wedatasphere.schedulis.system.servlet;
 
 import azkaban.ServiceProvider;
+import azkaban.executor.ExecutableFlow;
+import azkaban.executor.ExecutionController;
 import azkaban.executor.Executor;
+import azkaban.executor.ExecutorManagerAdapter;
+import azkaban.executor.ExecutorManagerException;
+import azkaban.flow.Flow;
+import azkaban.project.JdbcProjectImpl;
+import azkaban.project.Project;
+import azkaban.project.ProjectManager;
+import azkaban.scheduler.Schedule;
+import azkaban.scheduler.ScheduleManager;
+import azkaban.scheduler.ScheduleManagerException;
 import azkaban.server.HttpRequestUtils;
 import azkaban.server.session.Session;
 import azkaban.user.User;
@@ -31,6 +42,7 @@ import com.google.common.base.Joiner;
 import com.google.inject.Injector;
 import com.webank.wedatasphere.schedulis.common.executor.DepartmentGroup;
 import com.webank.wedatasphere.schedulis.common.i18nutils.LoadJsonUtils;
+import com.webank.wedatasphere.schedulis.common.user.SystemUserManager;
 import com.webank.wedatasphere.schedulis.system.entity.WebankDepartment;
 import com.webank.wedatasphere.schedulis.system.entity.WebankUser;
 import com.webank.wedatasphere.schedulis.system.entity.WtssUser;
@@ -66,6 +78,12 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
     private Props propsAzkaban;
     private final File webResourcesPath;
 
+    private SystemUserManager systemUserManager;
+    private ProjectManager projectManager;
+    private ExecutionController executionController;
+    private JdbcProjectImpl jdbcProjectImpl;
+    private ScheduleManager scheduleManager;
+    private ExecutorManagerAdapter executorManagerAdapter;
     private final String viewerName;
     private final String viewerPath;
 
@@ -88,6 +106,12 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
 
         Injector injector = ServiceProvider.SERVICE_PROVIDER.getInjector().createChildInjector(new SystemModule());
         systemManager = injector.getInstance(SystemManager.class);
+        systemUserManager = injector.getInstance(SystemUserManager.class);
+        projectManager = injector.getInstance(ProjectManager.class);
+        executionController = injector.getInstance(ExecutionController.class);
+        jdbcProjectImpl = injector.getInstance(JdbcProjectImpl.class);
+        scheduleManager = injector.getInstance(ScheduleManager.class);
+        executorManagerAdapter = injector.getInstance(ExecutorManagerAdapter.class);
         propsAzkaban = ServiceProvider.SERVICE_PROVIDER.getInstance(Props.class);
     }
 
@@ -134,6 +158,9 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
             ajaxLoadWebankDepartmentSelectData(req, resp, session, ret);
         } else if (ajaxName.equals("deleteSystemUser")) {
             ajaxDeleteSystemUser(req, resp, session, ret);
+        } else if (ajaxName.equals("deleteCtyunSystemUser")) {
+            // 退订时，停止用户提交的运行任务 + 去除用户的定时任务 + 删除用户的任务 + 删除用户
+            ajaxDeleteCtyunSystemUser(req, resp, session, ret);
         } else if (ajaxName.equals("syncXmlUsers")) {
             ajaxSyncXmlUsers(req, resp, session, ret);
         } else if (ajaxName.equals("findSystemDeparmentPage")) {
@@ -165,6 +192,147 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
         }
     }
 
+    private void ajaxDeleteCtyunSystemUser(final HttpServletRequest req, final HttpServletResponse resp,
+                                           final Session session, final HashMap<String, Object> ret) throws ServletException {
+        logger.info("————开始删除用户————");
+        //1.获取用户的账号和密码
+        String username = req.getParameter("username");
+        String password = req.getParameter("password");
+        //Map<String, String> dataMap = loadSystemServletI18nData();
+        User queryUser = null;
+        // 1.先通过用户名称判断用户是否存在
+        try {
+            logger.info("1.1 开始通过用户名查询用户");
+            queryUser = systemUserManager.getUser(username);
+        } catch (azkaban.user.UserManagerException e) {
+            logger.info("1.1 通过用户名查询用户失败");
+            logger.error("通过用户名获取用户时的错误信息" + e.getMessage());
+        }
+        if (queryUser == null) {
+            logger.info("用户不存在");
+            ret.put("sucess", "The user does not exist!");
+            return;
+        }
+        //2.通过账号密码获取用户，getUser()
+        logger.info("2.开始通过账号密码获取用户");
+        User deletingUser = null;
+        try {
+            deletingUser = systemUserManager.getUser(username, password);
+        } catch (azkaban.user.UserManagerException e) {
+            logger.info("2.1 通过用户名和密码查询用户失败");
+            logger.error("通过用户和密码获取用户时的错误信息" + e.getMessage());
+            ret.put("error", "Error getting User info");
+        }
+        if (deletingUser == null) {
+            logger.info("用户名称或密码不正确");
+            ret.put("error", "The user password is incorrect!");
+            return;
+        }
+        //3.通过User，获取用户下所有的Projects，getUserProjects()
+        logger.info("3.开始通过用户获取工程");
+        List<Project> userProjects = this.projectManager.getUserProjects(deletingUser);
+        String deletingUserId = deletingUser.getUserId();
+        //先判断是否用户下是否有任务，没有任务时直接删除用户
+        logger.info("4.开始循环删除用户的任务");
+        if (!CollectionUtils.isEmpty(userProjects)) {
+            //4.删除用户的任务
+            for (Project project: userProjects) {
+                int projectId = project.getId();
+                //4.1 获取用户的正在运行的任务，getRunningFlow()
+                logger.info("开始判断任务{}是否正在运行", project.getName());
+                List<Flow> runningFlow = projectManager.getRunningFlow(project);
+                logger.info("开始循环停止正在运行并删除的任务");
+                if (runningFlow != null) {
+                    for (Flow flow : runningFlow) {
+                        //4.2 kill正在运行的任务，ajaxCancelFlow()
+                        //4.2.1 获取正在运行的工作流对应的工程ID,execId
+                        List<Integer> runningFlows = executionController.getRunningFlows(projectId, flow.getId());
+                        logger.info("获取正在运行的工作流对应的工程ID列表{}", runningFlows);
+                        //判断是否有正在运行的工程，没有时直接去取消定时任务
+                        if (!CollectionUtils.isEmpty(runningFlows)) {
+                            logger.info("开始获取正在运行的工作流，并取消对应的工作流");
+                            for (Integer runningFlowId : runningFlows) {
+                                try {
+                                    //4.2.2 根据工程ID，获取ExecutableFlow
+                                    logger.info("获取ExecutableFlow类型的工作流");
+                                    ExecutableFlow executableFlow = executionController.getExecutableFlow(runningFlowId);
+                                    //4.2.3 取消工作流
+                                    logger.info("取消工作流");
+                                    cancelFlow(req, resp, ret, deletingUser, executableFlow);
+                                } catch (ExecutorManagerException e) {
+                                    logger.error(e.getMessage());
+                                    ret.put("error", "Error cancelling flows");
+                                }
+                            }
+                        }
+                    }
+                }
+                //4.3 取消定时任务，removeAssociateSchedules()
+                logger.info("取消对应{}工程的定时配置", project.getName());
+                removeAssociatedSchedules(project);
+                //4.4 删除用户的任务，单个任务单独删除，removeProject(Project,User).
+                //此时的User为uername，不带前缀的wtss_的用户名称
+                logger.info("删除{}用户的{}工程", deletingUserId, project.getName());
+                jdbcProjectImpl.removeProject(project, deletingUserId);
+            }
+        }
+        //5.删除用户deleteWtssUser()，例如用户名test对应用户Id为wtss_test
+        try {
+            logger.info("5.开始删除{}用户", username);
+            String userId = "wtss_" + username;
+            logger.info("用户名转化后为{}", userId);
+            int addResult = this.systemManager.deleteSystemUser(userId);
+            if (addResult == 1) {
+                ret.put("success", "delete system user success");
+            } else {
+                throw new SystemUserManagerException("删除用户失败!");
+            }
+        } catch (Exception e) {
+            ret.put("error", e);
+        }
+    }
+
+    /**
+     * 取消正在执行的工作流
+     * @param req
+     * @param resp
+     * @param ret
+     * @param user
+     * @param exFlow
+     * @throws ServletException
+     */
+    private void cancelFlow(final HttpServletRequest req, final HttpServletResponse resp,
+                            final HashMap<String, Object> ret, final User user, final ExecutableFlow exFlow)
+            throws ServletException {
+        try {
+            this.executorManagerAdapter.cancelFlow(exFlow, user.getUserId());
+        } catch (final ExecutorManagerException e) {
+            ret.put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * 取消工程的定时设置
+     * @param project 工程
+     * @throws ServletException
+     */
+    private void removeAssociatedSchedules(final Project project) throws ServletException {
+        // remove regular schedules
+        try {
+            List<Schedule> schedules = this.scheduleManager.getSchedules();
+            if (schedules != null) {
+                for (final Schedule schedule : schedules) {
+                    if (schedule.getProjectId() == project.getId()) {
+                        logger.info("removing schedule Id {}", schedule.getScheduleId());
+                        this.scheduleManager.removeSchedule(schedule);
+                    }
+                }
+            }
+        } catch (final ScheduleManagerException e) {
+            throw new ServletException(e);
+        }
+    }
+
     /**
      * 加载 SystemServlet 中的异常信息等国际化资源
      * @return
@@ -190,7 +358,7 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
      * @param ret
      * @throws ServletException
      */
-    public void aiaxAddSystemUserViaFastTrackCtyun(final HttpServletRequest req, final HttpServletResponse resp,
+    private void aiaxAddSystemUserViaFastTrackCtyun(final HttpServletRequest req, final HttpServletResponse resp,
                                                final Session session, final HashMap<String, Object> ret) throws ServletException {
         String userId;
         String password;
@@ -258,7 +426,6 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
             ret.put("error", e.getMessage());
         }
     }
-
 
     /**
      * 通过非登录页面的快速通道新增用户

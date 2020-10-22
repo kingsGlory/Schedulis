@@ -182,7 +182,9 @@ public abstract class LoginAbstractAzkabanServlet extends AbstractAzkabanServlet
 
   private boolean isRequestWithoutSession(HttpServletRequest req) {
     String ajaxName = getParam(req,"ajax", "");
-    return ajaxName.equals("executeFlowCycleFromExecutor") || ajaxName.equals("addSystemUserViaFastTrackCtyun");
+    return ajaxName.equals("executeFlowCycleFromExecutor")
+            || ajaxName.equals("addSystemUserViaFastTrackCtyun")
+            || ajaxName.equals("deleteCtyunSystemUser");
   }
 
   /**

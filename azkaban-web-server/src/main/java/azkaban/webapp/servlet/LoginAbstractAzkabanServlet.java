@@ -135,7 +135,7 @@ public abstract class LoginAbstractAzkabanServlet extends AbstractAzkabanServlet
       return;
     }
 
-    if("/api/v1/redirect".equals(req.getRequestURI())){
+    if(req.getRequestURI().contains("/api/v1/redirect")){
       logger.info("ingore the auth of DSS request: {}" +  req.getRequestURI());
       handleDssRequest(req,resp,session);
     }

@@ -210,7 +210,7 @@ public class SystemServlet extends LoginAbstractAzkabanServlet {
         }
         if (queryUser == null) {
             logger.info("用户不存在");
-            ret.put("sucess", "The user does not exist!");
+            ret.put("success", "The user does not exist!");
             return;
         }
         //2.通过账号密码获取用户，getUser()

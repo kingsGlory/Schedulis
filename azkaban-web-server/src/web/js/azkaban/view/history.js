@@ -251,7 +251,8 @@ azkaban.HistoryListView = Backbone.View.extend({
       //组装行
       var tdJob = document.createElement("td");
       var jobIdA = document.createElement("a");
-      $(jobIdA).attr("href", contextURL + "executor?execid=" + historyList[i].executionId);
+      console.log("href", contextURL + "/executor?execid=" + historyList[i].executionId);
+      $(jobIdA).attr("href", contextURL + "/executor?execid=" + historyList[i].executionId);
       $(jobIdA).text(historyList[i].executionId);
       tdJob.appendChild(jobIdA);
       row.appendChild(tdJob);

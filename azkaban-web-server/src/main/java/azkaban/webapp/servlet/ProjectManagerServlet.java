@@ -78,6 +78,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.servlet.ServletConfig;
@@ -1436,7 +1437,6 @@ public class ProjectManagerServlet extends LoginAbstractAzkabanServlet {
         IOException {
         final User user = session.getUser();
         final String projectName = getParam(req, "project");
-
         final Project project = this.projectManager.getProject(projectName);
         if (project == null) {
             this.setErrorMessageInCookie(resp, "Project " + projectName + " doesn't exist.");
@@ -1444,11 +1444,15 @@ public class ProjectManagerServlet extends LoginAbstractAzkabanServlet {
             resp.sendRedirect(req.getContextPath());
             return;
         }
+        String realUrl = req.getHeader("referer");
+        String[] strs = realUrl.split("\\?");
+        String URI =  StringUtils.isNotBlank(strs[0]) ? strs[0] : req.getRequestURI();
 
         if (!hasPermission(project, user, Type.ADMIN)) {
             this.setErrorMessageInCookie(resp,"Cannot delete. User '" + user.getUserId() + "' is not an ADMIN.");
             logger.info("Have no permission, Redirect to ---> " + req.getRequestURI() + "?project=" + projectName);
-            resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
+            resp.sendRedirect(URI + "?project=" + projectName);
+            //resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
             return;
         }
 
@@ -1458,24 +1462,40 @@ public class ProjectManagerServlet extends LoginAbstractAzkabanServlet {
             this.setErrorMessageInCookie(resp,"工作流: " + runningFlows.stream()
                 .map(Flow::getId).collect(Collectors.toList()).toString() + " 没有结束, 不能删除该工程.");
             logger.info("Flow is not finished, Redirect to ---> " + req.getRequestURI() + "?project=" + projectName);
-            resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
+            resp.sendRedirect(URI + "?project=" + projectName);
+            //resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
             return;
         }
 
         removeAssociatedSchedules(project);
 
         try {
+            logger.info("Start Remove project: " + req.getRequestURI() + "?project=" + projectName);
             this.projectManager.removeProject(project, user);
         } catch (final ProjectManagerException e) {
             this.setErrorMessageInCookie(resp, e.getMessage());
             logger.info("Remove project error, Redirect to ---> " + req.getRequestURI() + "?project=" + projectName);
-            resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
+            resp.sendRedirect(URI + "?project=" + projectName);
+            //resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
             return;
         }
 
         this.setSuccessMessageInCookie(resp, "Delete Project[" + projectName + "] Success.");
         //删除成功后控制前端页面跳转位置
-        resp.sendRedirect("/index");
+        final Props props = this.application.getServerProps();
+        String contextPath = props.getString("azkaban.context.path", "");
+        String domain = getDomain(realUrl);
+        resp.sendRedirect(domain + contextPath + "/index");
+    }
+
+    private String getDomain(String realUrl) {
+        String result = "";
+        Pattern p =  Pattern.compile("^((http:\\/\\/)|(https:\\/\\/))?([a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z:0-9]{2,10}");
+        Matcher matcher = p.matcher(realUrl);
+        if(matcher.find()){
+            result = matcher.group();
+        }
+        return result;
     }
 
     private void ajaxChangeDescription(final Project project,
@@ -3191,7 +3211,12 @@ public class ProjectManagerServlet extends LoginAbstractAzkabanServlet {
         }
 
         logger.info("Upload project, Redirect to ---> " + req.getRequestURI() + "?project=" + projectName);
-        resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
+        String realUrl = req.getHeader("referer");
+        String[] strs = realUrl.split("\\?");
+        String URI =  StringUtils.isNotBlank(strs[0]) ? strs[0] : req.getRequestURI();
+        logger.info("Upload project, Redirect to ---> " + strs[0] + "?project=" + projectName);
+        resp.sendRedirect(URI + "?project=" + projectName);
+        //resp.sendRedirect(req.getRequestURI() + "?project=" + projectName);
     }
 
     private Permission getPermissionObject(final Project project, final User user,
